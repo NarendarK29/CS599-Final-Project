@@ -123,6 +123,7 @@ class PortfolioSim(object):
             e.g. [1.0, 0.9, 1.1]
         Numbered equations are from https://arxiv.org/abs/1706.10059
         """
+        #print ("enter step")
         assert w1.shape == y1.shape, 'w1 and y1 must have the same shape'
         assert y1[0] == 1.0, 'y1[0] must be 1'
 
@@ -161,6 +162,8 @@ class PortfolioSim(object):
         return reward, info, done
 
     def reset(self):
+
+        #print ("not enter reset")
         self.infos = []
         self.p0 = 1.0
 
@@ -329,6 +332,8 @@ class MultiActionPortfolioEnv(PortfolioEnv):
         Returns:
 
         """
+
+
         assert action.ndim == 2, 'Action must be a two dimensional array with shape (num_models, num_stocks + 1)'
         assert action.shape[1] == len(self.sim[0].asset_names) + 1
         assert action.shape[0] == len(self.model_names)
@@ -373,6 +378,12 @@ class MultiActionPortfolioEnv(PortfolioEnv):
         info['next_obs'] = ground_truth_obs
 
         self.infos.append(info)
+
+        #print (info)
+
+        #print("My action is :",action)
+
+
 
         return observation, rewards, np.all(dones) or done1, info
 

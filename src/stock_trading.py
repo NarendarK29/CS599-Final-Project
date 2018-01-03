@@ -238,6 +238,7 @@ def test_model_multiple(env, models):
         for model in models:
             actions.append(model.predict_single(observation))
         actions = np.array(actions)
+        #print("Actions",actions)
         observation, _, done, info = env.step(actions)
     env.render()
 
