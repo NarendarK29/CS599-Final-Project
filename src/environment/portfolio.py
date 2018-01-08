@@ -129,9 +129,12 @@ class PortfolioSim(object):
 
         #reajust the return y1 using the sign of w1
         #if is negative means we shorted so the return is the inverse
+
+        y1_aux=y1.copy()
         for i in range(len(w1)):
             if(w1[i]<0):
-                y1[i]=y1_short[i]
+                y1_aux[i]=y1_short[i]
+        y1=y1_aux.copy()
 
 
 
@@ -161,6 +164,7 @@ class PortfolioSim(object):
         # if we run out of money, we're done (losing all the money)
         done = p1 == 0
 
+
         info = {
             "reward": reward,
             "log_return": r1,
@@ -171,6 +175,9 @@ class PortfolioSim(object):
             "weights_std": w1.std(),
             "cost": mu1,
         }
+
+        #print (info)
+
         self.infos.append(info)
         return reward, info, done
 
@@ -249,17 +256,29 @@ class PortfolioEnv(gym.Env):
         )
 
         # normalise just in case
-        action = np.clip(action, 0, 1)
+        action = np.clip(action, -1, 1)
 
         weights = action  # np.array([cash_bias] + list(action))  # [w0, w1...]
         weights /= (weights.sum() + eps)
         weights[0] += np.clip(1 - weights.sum(), 0,
                               1)  # so if weights are all zeros we normalise to [1,0...]
 
-        assert ((action >= 0) * (
-        action <= 1)).all(), 'all action values should be between 0 and 1. Not %s' % action
+        #assert ((action >= 0) * (
+        #action <= 1)).all(), 'all action values should be between 0 and 1. Not %s' % action
+
+
+        pos_w = [abs(number) for number in weights]
+        new_weigths=weights.copy()
+        sum_w = sum(pos_w)
+
+        pos_w = np.zeros(len(new_weigths))
+        for i in range(len(pos_w)):
+             new_weigths[i]=weights[i]/sum_w
+             pos_w[i] = abs(new_weigths[i])
+        weights=new_weigths[:]
+
         np.testing.assert_almost_equal(
-            np.sum(weights), 1.0, 3,
+            np.sum(pos_w), 1.0, 3,
             err_msg='weights should sum to 1. action="%s"' % weights)
 
         observation, done1, ground_truth_obs = self.src._step()
@@ -280,7 +299,7 @@ class PortfolioEnv(gym.Env):
         y1_long = close_price_vector / open_price_vector
         y1_short = open_price_vector / close_price_vector
 
-        reward, info, done2 = self.sim._step(weights, y1_long,y1_short)
+        reward, info, done2 = self.sim._step(pos_w, y1_long,y1_short)
 
         # calculate return for buy and hold a bit of each asset
         info['market_value'] = \
