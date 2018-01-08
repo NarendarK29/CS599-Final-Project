@@ -17,8 +17,9 @@ import tflearn
 import tensorflow as tf
 import argparse
 import pprint
+import pickle
 
-DEBUG = False
+DEBUG = True #False
 
 
 def get_model_path(window_length, predictor_type, use_batch_norm):
@@ -114,6 +115,7 @@ class StockActor(ActorNetwork):
         # Final layer weights are init to Uniform[-3e-3, 3e-3]
         w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
         out = tflearn.fully_connected(net, self.a_dim[0], activation='softmax', weights_init=w_init)
+        print (self.action_bound)
         # Scale output to -action_bound to action_bound
         scaled_out = tf.multiply(out, self.action_bound)
         return inputs, out, scaled_out
@@ -240,6 +242,7 @@ def test_model_multiple(env, models):
         actions = np.array(actions)
         #print("Actions",actions)
         observation, _, done, info = env.step(actions)
+        #print("this is observation",observation)
     env.render()
 
 
@@ -262,9 +265,20 @@ if __name__ == '__main__':
         DEBUG = False
 
     history, abbreviation = read_stock_history(filepath='utils/datasets/stocks_history_target.h5')
+
+    with open('utils/datasets/all_eqw', 'rb') as fr:
+        history = pickle.load(fr, encoding='latin1')
+
+    with open('utils/datasets/stock_names', 'rb') as fr:
+        abbreviation = pickle.load(fr, encoding='latin1')
+
     history = history[:, :, :4]
+
+
+    print(history.shape)
+
     target_stocks = abbreviation
-    num_training_time = 1095
+    num_training_time = 750
     window_length = int(args['window_length'])
     nb_classes = len(target_stocks) + 1
 
@@ -274,7 +288,10 @@ if __name__ == '__main__':
         target_history[i] = history[abbreviation.index(stock), :num_training_time, :]
 
     # setup environment
-    env = PortfolioEnv(target_history, target_stocks, steps=1000, window_length=window_length)
+
+    env = PortfolioEnv(target_history, target_stocks, steps=600, window_length=window_length)
+
+    print("envior stepu")
 
     action_dim = [nb_classes]
     state_dim = [nb_classes, window_length]

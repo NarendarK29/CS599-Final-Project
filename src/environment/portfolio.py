@@ -84,6 +84,9 @@ class DataGenerator(object):
     def reset(self):
         self.step = 0
 
+
+        print (self._data.shape)
+
         # get data for this episode, each episode might be different.
         if self.start_date is None:
             self.idx = np.random.randint(
@@ -115,7 +118,7 @@ class PortfolioSim(object):
         self.time_cost = time_cost
         self.steps = steps
 
-    def _step(self, w1, y1):
+    def _step(self, w1, y1,y1_short):
         """
         Step.
         w1 - new action of portfolio weights - e.g. [0.1,0.9,0.0]
@@ -123,6 +126,16 @@ class PortfolioSim(object):
             e.g. [1.0, 0.9, 1.1]
         Numbered equations are from https://arxiv.org/abs/1706.10059
         """
+
+        #reajust the return y1 using the sign of w1
+        #if is negative means we shorted so the return is the inverse
+        for i in range(len(w1)):
+            if(w1[i]<0):
+                y1[i]=y1_short[i]
+
+
+
+
         #print ("enter step")
         assert w1.shape == y1.shape, 'w1 and y1 must have the same shape'
         assert y1[0] == 1.0, 'y1[0] must be 1'
@@ -229,6 +242,7 @@ class PortfolioEnv(gym.Env):
         - Where wn is a portfolio weight from 0 to 1. The first is cash_bias
         - cn is the portfolio conversion weights see PortioSim._step for description
         """
+
         np.testing.assert_almost_equal(
             action.shape,
             (len(self.sim.asset_names) + 1,)
@@ -239,37 +253,49 @@ class PortfolioEnv(gym.Env):
 
         weights = action  # np.array([cash_bias] + list(action))  # [w0, w1...]
         weights /= (weights.sum() + eps)
-        weights[0] += np.clip(1 - weights.sum(), 0, 1)  # so if weights are all zeros we normalise to [1,0...]
+        weights[0] += np.clip(1 - weights.sum(), 0,
+                              1)  # so if weights are all zeros we normalise to [1,0...]
 
-        assert ((action >= 0) * (action <= 1)).all(), 'all action values should be between 0 and 1. Not %s' % action
+        assert ((action >= 0) * (
+        action <= 1)).all(), 'all action values should be between 0 and 1. Not %s' % action
         np.testing.assert_almost_equal(
-            np.sum(weights), 1.0, 3, err_msg='weights should sum to 1. action="%s"' % weights)
+            np.sum(weights), 1.0, 3,
+            err_msg='weights should sum to 1. action="%s"' % weights)
 
         observation, done1, ground_truth_obs = self.src._step()
 
         # concatenate observation with ones
-        cash_observation = np.ones((1, self.window_length, observation.shape[2]))
+        cash_observation = np.ones(
+            (1, self.window_length, observation.shape[2]))
         observation = np.concatenate((cash_observation, observation), axis=0)
 
         cash_ground_truth = np.ones((1, 1, ground_truth_obs.shape[2]))
-        ground_truth_obs = np.concatenate((cash_ground_truth, ground_truth_obs), axis=0)
+        ground_truth_obs = np.concatenate(
+            (cash_ground_truth, ground_truth_obs), axis=0)
 
         # relative price vector of last observation day (close/open)
         close_price_vector = observation[:, -1, 3]
         open_price_vector = observation[:, -1, 0]
         y1 = close_price_vector / open_price_vector
-        reward, info, done2 = self.sim._step(weights, y1)
+        y1_long = close_price_vector / open_price_vector
+        y1_short = open_price_vector / close_price_vector
+
+        reward, info, done2 = self.sim._step(weights, y1_long,y1_short)
 
         # calculate return for buy and hold a bit of each asset
-        info['market_value'] = np.cumprod([inf["return"] for inf in self.infos + [info]])[-1]
+        info['market_value'] = \
+        np.cumprod([inf["return"] for inf in self.infos + [info]])[-1]
         # add dates
-        info['date'] = index_to_date(self.start_idx + self.src.idx + self.src.step)
+        info['date'] = index_to_date(
+            self.start_idx + self.src.idx + self.src.step)
         info['steps'] = self.src.step
         info['next_obs'] = ground_truth_obs
 
         self.infos.append(info)
 
         return observation, reward, done1 or done2, info
+
+
 
     def _reset(self):
         self.infos = []
@@ -337,15 +363,30 @@ class MultiActionPortfolioEnv(PortfolioEnv):
         assert action.ndim == 2, 'Action must be a two dimensional array with shape (num_models, num_stocks + 1)'
         assert action.shape[1] == len(self.sim[0].asset_names) + 1
         assert action.shape[0] == len(self.model_names)
+
+        print("before normalisation",action)
+
+        #Let's ALLOW THE SHORT!!!
         # normalise just in case
-        action = np.clip(action, 0, 1)
+        #action = np.clip(action, 0, 1)
+        action = np.clip(action, -1, 1)
+
         weights = action  # np.array([cash_bias] + list(action))  # [w0, w1...]
-        weights /= (np.sum(weights, axis=1, keepdims=True) + eps)
+        #weights /= (np.sum(weights, axis=1, keepdims=True) + eps)
+
         # so if weights are all zeros we normalise to [1,0...]
         weights[:, 0] += np.clip(1 - np.sum(weights, axis=1), 0, 1)
-        assert ((action >= 0) * (action <= 1)).all(), 'all action values should be between 0 and 1. Not %s' % action
-        np.testing.assert_almost_equal(np.sum(weights, axis=1), np.ones(shape=(weights.shape[0])), 3,
-                                       err_msg='weights should sum to 1. action="%s"' % weights)
+        #assert ((action >= 0) * (action <= 1)).all(), 'all action values should be between 0 and 1. Not %s' % action
+
+        #assert ((action >= 0) * (action <= 1)).all(), 'all action values should be between 0 and 1. Not %s' % action
+
+
+        pos_w = [abs(number) for number in weights]
+
+
+        np.testing.assert_almost_equal(np.sum(pos_w, axis=1), np.ones(shape=(weights.shape[0])), 3,
+                                           err_msg='weights should sum to 1. action="%s"' % weights)
+
         observation, done1, ground_truth_obs = self.src._step()
 
         # concatenate observation with ones
@@ -355,16 +396,29 @@ class MultiActionPortfolioEnv(PortfolioEnv):
         cash_ground_truth = np.ones((1, 1, ground_truth_obs.shape[2]))
         ground_truth_obs = np.concatenate((cash_ground_truth, ground_truth_obs), axis=0)
 
+
         # relative price vector of last observation day (close/open)
+
+
         close_price_vector = observation[:, -1, 3]
         open_price_vector = observation[:, -1, 0]
-        y1 = close_price_vector / open_price_vector
+
+
+        y1_long = close_price_vector / open_price_vector
+
+        y1_short= open_price_vector/close_price_vector
+        #for i in len(range(observation.shape[0])):
+        #    if
+
+        #print("THIS IS Y1",y1)
+        #print("y1 shape",y1.shape)
+        #print("wieh",weights.shape)
 
         rewards = np.empty(shape=(weights.shape[0]))
         info = {}
         dones = np.empty(shape=(weights.shape[0]), dtype=bool)
         for i in range(weights.shape[0]):
-            reward, current_info, done2 = self.sim[i]._step(weights[i], y1)
+            reward, current_info, done2 = self.sim[i]._step(weights[i], y1_long,y1_short)
             rewards[i] = reward
             info[self.model_names[i]] = current_info['portfolio_value']
             info['return'] = current_info['return']

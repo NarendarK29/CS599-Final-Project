@@ -19,7 +19,10 @@ def build_summaries():
     episode_ave_max_q = tf.Variable(0.)
     tf.summary.scalar("Qmax_Value", episode_ave_max_q)
 
-    summary_vars = [episode_reward, episode_ave_max_q]
+    portfolio_value = tf.Variable(0.)
+    tf.summary.scalar("Portfolio Value", portfolio_value)
+
+    summary_vars = [episode_reward, episode_ave_max_q, portfolio_value]
     summary_ops = tf.summary.merge_all()
 
     return summary_ops, summary_vars
@@ -82,6 +85,7 @@ class DDPG(BaseModel):
         Returns:
 
         """
+        print("starting train ddpg")
         writer = tf.summary.FileWriter(self.summary_path, self.sess.graph)
 
         self.actor.update_target_network()
@@ -114,7 +118,9 @@ class DDPG(BaseModel):
                 else:
                     action_take = action
                 # step forward
-                observation, reward, done, _ = self.env.step(action_take)
+                observation, reward, done, info = self.env.step(action_take)
+
+                portfolio_value = info["portfolio_value"]
 
                 if self.obs_normalizer:
                     observation = self.obs_normalizer(observation)
@@ -153,10 +159,17 @@ class DDPG(BaseModel):
                 ep_reward += reward
                 previous_observation = observation
 
+                #print(portfolio_value.shape)
+                # print(ep_reward.shape)
+
                 if done or j == self.config['max step'] - 1:
                     summary_str = self.sess.run(self.summary_ops, feed_dict={
                         self.summary_vars[0]: ep_reward,
-                        self.summary_vars[1]: ep_ave_max_q / float(j)
+                        self.summary_vars[1]: ep_ave_max_q / float(j),
+
+
+                        self.summary_vars[2] : portfolio_value
+
                     })
 
                     writer.add_summary(summary_str, i)

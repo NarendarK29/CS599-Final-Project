@@ -107,6 +107,7 @@ def visualise_Data():
     predictor_type_lst = ['cnn', 'lstm']
     use_batch_norm = True
 
+
     for window_length in window_length_lst:
         name = 'imit_LSTM%3A window = {}'.format(window_length)
         model_name = 'imitation_lstm_window_{}'.format(window_length)
@@ -171,8 +172,10 @@ def visualise_Data():
                 models.append(ddpg_model)
 
     env = MultiActionPortfolioEnv(target_history, target_stocks,
-                                  model_names[:8], steps=500,
+                                  model_names[8:], steps=500,
                                   sample_start_date='2012-10-30')
+
+    test_model_multiple(env, models[8:])
 
 
 
